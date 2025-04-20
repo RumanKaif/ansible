@@ -1,0 +1,120 @@
+---
+- name: deploy tomcat
+  hosts: localhost
+  become: yes
+  vars: 
+    java_version: openjdk-17-jdk
+    user_name: tomcat
+    group_name: tomcat
+    home_dir: /opt/tomcat
+    shell_path: /bin/false 
+  
+  tasks:
+    - name: install java-17
+      ansible.builtin.apt:
+        name: "{{java_version}}"
+        update_cache: yes
+    
+    - name: add group tomcat
+      ansible.builtin.group:
+        name: "{{user_name}}"
+        state: present
+    
+    - name: create user tomcat
+      ansible.builtin.user:
+        name: "{{user_name}}"
+        shell: "{{shell_path}}"
+        home: "{{home_dir}}"
+        create_home: yes
+    
+    - name: downloding tomcat
+      ansible.builtin.get_url:
+        url: https://dlcdn.apache.org/tomcat/tomcat-11/v11.0.6/bin/apache-tomcat-11.0.6.tar.gz
+        dest: /tmp
+    
+    - name: Create a directory if it does not exist
+      ansible.builtin.file:
+        path: "{{home_dir}}"
+        state: directory
+    
+    - name: extract tomcat to /opt/tomcat
+      ansible.builtin.unarchive:
+        src: /tmp/apache-tomcat-11.0.6.tar.gz
+        dest: "{{home_dir}}"
+    
+    - name: Recursively change ownership of a directory
+      ansible.builtin.file:
+        path: "{{home_dir}}"
+        state: directory
+        recurse: yes
+        owner: "{{user_name}}"
+        group: "{{group_name}}"
+    
+    - name: Recursively add group read permission to /opt/tomcat/conf
+      ansible.builtin.file:
+        path: /opt/tomcat/apache-tomcat-11.0.6/conf
+        recurse: yes
+        mode: g+r
+      become: yes
+
+    - name: Grant group write permission to /opt/tomcat/conf
+      ansible.builtin.file:
+        path: /opt/tomcat/apache-tomcat-11.0.6/conf
+        mode: g+x
+      become: yes
+
+    - name: copy tomcat-users.xml file
+      ansible.builtin.copy:
+        src: /tmp/tomcat-user.xml
+        dest: /opt/tomcat/apache-tomcat-11.0.6/conf/tomcat-users.xml
+
+    - name: copy context.xml file
+      ansible.builtin.copy:
+        src: /tmp/context.xml
+        dest: /opt/tomcat/apache-tomcat-11.0.6/webapps/manager/META-INF/context.xml
+
+    - name: copy tomcat.service file
+      ansible.builtin.copy:
+        src: /tmp/tomcat.service
+        dest: /etc/systemd/system/tomcat.service
+
+    - name: daemon-reload to apply the new service configuration.
+      ansible.builtin.systemd_service:
+        name: Reload systemd daemon
+        daemon-reload: true
+    
+    - name: enable tomcat.service
+      ansible.builtin.service:
+        name: tomcat
+        enabled: yes
+      
+    - name: start tomcat.service
+      ansible.builtin.service:
+        name: tomcat
+        state: started
+
+    - name: Allow all access to tcp port 22
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: enable UFW
+      community.general.ufw:
+        state: enabled
+    
+    - name: Allow all access to tcp port 22
+      community.general.ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: Reload UFW
+      community.general.ufw:
+        rule: allow
+        state: reloaded
+
+
+
+
+
